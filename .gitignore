@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+nul
+desktop.ini
+
+# Environment
+.env
+.env.local
+*.env
+
+# Data
+*.csv
+*.parquet
+*.pkl
+*.joblib
+data/raw/
+data/processed/
+
+# ML artifacts
+models/*.pkl
+models/*.joblib
+mlruns/
+wandb/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Airflow
+airflow/logs/
+airflow/airflow.db
+
+# Azure
+.azure/
+local.settings.json

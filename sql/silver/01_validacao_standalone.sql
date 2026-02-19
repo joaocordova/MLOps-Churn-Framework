@@ -8,7 +8,7 @@
 
 
 -- ============================================================================
--- 🔍 VAL_1A: DISTRIBUIÇÃO DE SEGMENTOS POR BRANCH
+--  VAL_1A: DISTRIBUIÇÃO DE SEGMENTOS POR BRANCH
 -- ============================================================================
 -- O QUE VERIFICAR:
 --   ✓ REGULAR deve ser > AGREGADOR na maioria das branches
@@ -45,7 +45,7 @@ WHERE m.branch_id = ANY('{345,181,59,233,401,166,33,6,149}'::BIGINT[]);
 
 
 -- ============================================================================
--- 🔍 VAL_1B: CONTRATOS CLASSIFICADOS PELO NÍVEL 2 (entries)
+--  VAL_1B: CONTRATOS CLASSIFICADOS PELO NÍVEL 2 (entries)
 -- ============================================================================
 -- O QUE VERIFICAR:
 --   ✓ Contratos com nome REGULAR mas classificados como AGREGADOR
@@ -71,7 +71,7 @@ ORDER BY cc.member_id, cc.start_date;
 
 
 -- ============================================================================
--- 🔍 VAL_1C: MEMBROS COM TRANSIÇÃO DE SEGMENTO
+--  VAL_1C: MEMBROS COM TRANSIÇÃO DE SEGMENTO
 -- ============================================================================
 -- O QUE VERIFICAR:
 --   ✓ A timeline faz sentido (regular primeiro, depois agregador, ou vice-versa)
@@ -97,7 +97,7 @@ ORDER BY cc.member_id, cc.start_date;
 
 
 -- ============================================================================
--- 🔍 VAL_1D: data_efetiva_fim ESTÁ CORRETA?
+--  VAL_1D: data_efetiva_fim ESTÁ CORRETA?
 -- ============================================================================
 -- O QUE VERIFICAR:
 --   ✓ Query deve retornar 0 linhas (zero erros)
@@ -124,7 +124,7 @@ WHERE
 
 
 -- ============================================================================
--- 🔍 VAL_2A: RESUMO DE SPELLS
+--  VAL_2A: RESUMO DE SPELLS
 -- ============================================================================
 -- O QUE VERIFICAR:
 --   ✓ Duração média faz sentido (regular 3-8 meses, agregador 2-6 meses)
@@ -150,7 +150,7 @@ ORDER BY branch_id, segmento;
 
 
 -- ============================================================================
--- 🔍 VAL_2B: INTEGRIDADE — CONTRATOS × SPELLS
+--  VAL_2B: INTEGRIDADE — CONTRATOS × SPELLS
 -- ============================================================================
 -- O QUE VERIFICAR:
 --   ✓ contratos_na_mv1 = contratos_nos_spells
@@ -167,12 +167,12 @@ SELECT
     tc.n AS contratos_na_mv1,
     ts.n AS contratos_nos_spells,
     tc.n - ts.n AS diferenca,
-    CASE WHEN tc.n = ts.n THEN '✅ OK' ELSE '❌ DIVERGÊNCIA' END AS status
+    CASE WHEN tc.n = ts.n THEN ' OK' ELSE ' DIVERGÊNCIA' END AS status
 FROM total_contratos tc, total_em_spells ts;
 
 
 -- ============================================================================
--- 🔍 VAL_2C: NÃO DEVEM EXISTIR SPELLS SOBREPOSTOS
+--  VAL_2C: NÃO DEVEM EXISTIR SPELLS SOBREPOSTOS
 -- ============================================================================
 -- O QUE VERIFICAR:
 --   ✓ Deve retornar 0 linhas
@@ -194,7 +194,7 @@ JOIN analytics.mv_spells_v2 b
 
 
 -- ============================================================================
--- 🔍 VAL_3A: DISTRIBUIÇÃO DE EVENTOS
+--  VAL_3A: DISTRIBUIÇÃO DE EVENTOS
 -- ============================================================================
 -- O QUE VERIFICAR:
 --   ✓ CHURN não deve ser > 80% dos eventos (senão algo está errado)
@@ -219,7 +219,7 @@ ORDER BY segmento, evento;
 
 
 -- ============================================================================
--- 🔍 VAL_3B: INTEGRIDADE — SPELLS × EVENTOS
+--  VAL_3B: INTEGRIDADE — SPELLS × EVENTOS
 -- ============================================================================
 -- O QUE VERIFICAR:
 --   ✓ Cada spell deve ter exatamente 1 evento
@@ -235,12 +235,12 @@ SELECT
     sc.n AS total_spells,
     ec.n AS total_eventos,
     sc.n - ec.n AS diferenca,
-    CASE WHEN sc.n = ec.n THEN '✅ OK' ELSE '❌ DIVERGÊNCIA' END AS status
+    CASE WHEN sc.n = ec.n THEN ' OK' ELSE ' DIVERGÊNCIA' END AS status
 FROM spell_count sc, event_count ec;
 
 
 -- ============================================================================
--- 🔍 VAL_3C: CHURNS POR MÊS E SEGMENTO (2025+)
+--  VAL_3C: CHURNS POR MÊS E SEGMENTO (2025+)
 -- ============================================================================
 -- O QUE VERIFICAR:
 --   ✓ Tendência mensal faz sentido (jan tem mais churn pós-férias)
@@ -262,7 +262,7 @@ ORDER BY churn_confirmed_mes, segmento;
 
 
 -- ============================================================================
--- 🔍 VAL_3D: MIGRAÇÕES — DIREÇÃO
+--  VAL_3D: MIGRAÇÕES — DIREÇÃO
 -- ============================================================================
 -- O QUE VERIFICAR:
 --   ✓ Regular→Agregador ou Agregador→Regular?
@@ -283,7 +283,7 @@ ORDER BY migracoes DESC;
 
 
 -- ============================================================================
--- 🔍 VAL_3E: CHURN RATE MENSAL POR BRANCH (KPI PRINCIPAL)
+--  VAL_3E: CHURN RATE MENSAL POR BRANCH (KPI PRINCIPAL)
 -- ============================================================================
 -- O QUE VERIFICAR:
 --   ✓ Churn rate entre 3-15% mensal é normal para academias
@@ -338,7 +338,7 @@ ORDER BY a.branch_id, a.mes;
 
 
 -- ============================================================================
--- 🔍 VAL_3F: DRILL-DOWN — CONFERÊNCIA MANUAL DE CHURNS
+--  VAL_3F: DRILL-DOWN — CONFERÊNCIA MANUAL DE CHURNS
 -- ============================================================================
 -- INSTRUÇÕES:
 --   1. Pegue 5-10 member_ids da lista abaixo
@@ -371,7 +371,7 @@ LIMIT 20;
 
 
 -- ============================================================================
--- 🔍 VAL_4A: MEMBER_KPI_BASE — RESUMO POR BRANCH
+--  VAL_4A: MEMBER_KPI_BASE — RESUMO POR BRANCH
 -- ============================================================================
 
 SELECT
@@ -392,7 +392,7 @@ ORDER BY branch_id, segmento_atual;
 
 
 -- ============================================================================
--- 🔍 VAL_4B: ALERTA DE INATIVIDADE (RISCO DE CHURN)
+--  VAL_4B: ALERTA DE INATIVIDADE (RISCO DE CHURN)
 -- ============================================================================
 -- Membros ativos que não fazem checkin há mais de 15 dias
 -- = candidatos para régua de e-mail preventiva
@@ -416,7 +416,7 @@ LIMIT 30;
 
 
 -- ============================================================================
--- 🔍 VAL_4C: CROSS-CHECK — ATIVOS NA MV vs STATUS EVO
+--  VAL_4C: CROSS-CHECK — ATIVOS NA MV vs STATUS EVO
 -- ============================================================================
 -- O QUE VERIFICAR:
 --   ✓ Membros is_active=TRUE devem ter status_evo='Active' (maioria)

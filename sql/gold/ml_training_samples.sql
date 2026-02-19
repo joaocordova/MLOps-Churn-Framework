@@ -4,11 +4,13 @@
 -- Purpose: Generate training data for churn prediction with strict
 --          point-in-time correctness (no data leakage).
 --
+-- SCOPE: REGULAR members ONLY. Aggregators excluded from model.
+--
 -- Each row = one member at one reference_date, with features computed
 -- using ONLY data available at that reference_date.
 --
--- Positive samples: 3 per churn event (spell_end, spell_end-15d, spell_end-30d)
--- Negative samples: monthly snapshots of active members
+-- Positive samples: 3 per REGULAR churn event (spell_end, spell_end-15d, spell_end-30d)
+-- Negative samples: monthly snapshots of active REGULAR members
 --
 -- Anti-leakage rules:
 --   - All features use WHERE date <= reference_date
@@ -51,6 +53,7 @@ positive_samples AS (
 
     FROM analytics.mv_churn_events ce
     WHERE ce.evento = 'CHURN'
+      AND ce.segmento = 'REGULAR'             -- REGULAR only (D13)
       -- Ensure spell_end - 30d still has enough history
       AND ce.spell_end >= '2025-03-01'::DATE
 
@@ -71,6 +74,7 @@ positive_samples AS (
 
     FROM analytics.mv_churn_events ce
     WHERE ce.evento = 'CHURN'
+      AND ce.segmento = 'REGULAR'             -- REGULAR only (D13)
       AND ce.spell_end >= '2025-03-01'::DATE
       -- Ensure reference_date is AFTER spell_start (member was active)
       AND (ce.spell_end - INTERVAL '15 days')::DATE >= ce.spell_start
@@ -92,6 +96,7 @@ positive_samples AS (
 
     FROM analytics.mv_churn_events ce
     WHERE ce.evento = 'CHURN'
+      AND ce.segmento = 'REGULAR'             -- REGULAR only (D13)
       AND ce.spell_end >= '2025-03-01'::DATE
       -- Ensure reference_date is AFTER spell_start (member was active)
       AND (ce.spell_end - INTERVAL '30 days')::DATE >= ce.spell_start
@@ -128,8 +133,10 @@ negative_samples AS (
     FROM analytics.mv_spells_v2 s
     CROSS JOIN active_months am
     WHERE
+        -- REGULAR only (D13)
+        s.segmento = 'REGULAR'
         -- Spell was active at snapshot_date
-        s.spell_start <= am.snapshot_date
+        AND s.spell_start <= am.snapshot_date
         AND s.spell_end >= am.snapshot_date
         -- Member stayed active for 30+ more days (verifiable label)
         AND s.spell_end >= (am.snapshot_date + INTERVAL '30 days')::DATE

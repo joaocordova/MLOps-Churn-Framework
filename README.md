@@ -59,8 +59,11 @@ skyfit-predict/
 |   |   |-- 00_architecture_complete.sql # 4 Materialized Views (built)
 |   |   +-- 01_validacao_standalone.sql  # 15 validation queries (built)
 |   |-- gold/
-|   |   |-- ml_training_samples.sql      # Point-in-time feature store (designed)
-|   |   +-- ml_churn_predictions.sql     # Predictions + playbooks tables (designed)
+|   |   |-- ml_training_samples.sql      # Point-in-time feature store — REGULAR only (designed)
+|   |   |-- ml_churn_predictions.sql     # Predictions + playbooks tables (designed)
+|   |   +-- ml_outcome_tracking.sql      # Retroactive outcome verification + manager reports
+|   |-- validation/
+|   |   +-- 02_ml_readiness_validation.sql # 15 ML-specific validation queries (BLOCKING)
 |   +-- ml/                              # Model-specific queries
 |
 |-- src/
@@ -119,10 +122,25 @@ Refresh order: 1 -> 2 -> 3 -> 4 (dependencies cascade)
 
 - [x] Section 1: System Architecture Overview (approved)
 - [x] Section 2: Feature Store with Point-in-Time Correctness (approved)
-- [ ] Section 3: Model Architecture
+- [x] Section 3: Model Architecture — REGULAR only, 4 XGB specialists + LogReg meta (approved)
+- [x] Section 3b: Outcome Tracking — retroactive verification + manager monthly report (approved)
 - [ ] Section 4: Deployment & MLOps
 - [ ] Section 5: Trade-off Analysis
 - [ ] Section 6: Frontend & Playbooks
+
+## Data Validation (BLOCKING)
+
+Before ML training, run the validation queries and share results:
+
+1. **Existing data layer:** `sql/silver/01_validacao_standalone.sql` (15 queries)
+2. **ML readiness:** `sql/validation/02_ml_readiness_validation.sql` (15 queries)
+
+Critical checks:
+- ML_VAL_01: Monthly REGULAR churn volume (sizes walk-forward windows)
+- ML_VAL_02: Active REGULAR members per branch (sizes scoring pipeline)
+- ML_VAL_05: NULL rates in key features (must be < 5%)
+- ML_VAL_10: Temporal gaps in entry data (false inactivity signals)
+- ML_VAL_14: Estimated sample size and churn rate
 
 ## How to Resume
 

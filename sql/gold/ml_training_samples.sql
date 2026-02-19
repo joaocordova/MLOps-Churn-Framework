@@ -18,7 +18,20 @@
 --   - total_previous_churns uses churn_confirmed_date < reference_date
 --   - Negative samples only where member stayed 30+ more days (verified)
 --
+-- V1 (D19): Extended to 2024+ for broader temporal coverage.
+--   Training starts 2024-03-01 (after inertia period).
+--   Test period covers 2025-H2 (Jul-Dec 2025).
+--
+-- D17: Monthly contracts auto-renew every ~30 days.
+--   contract_expiring_30d is always True for active monthly members.
+--   days_since_last_payment is the primary financial signal.
+--
+-- D18: Non-payment -> default -> turnstile blocked.
+--   is_defaulter = has_open_receivable AND days_since_last_payment > 30.
+--   Derived in Python (data_loader.py) from SQL features.
+--
 -- Data de criacao: 2026-02-19
+-- Atualizado: 2026-02-19 (V1 -- D17, D18, D19)
 -- ============================================================================
 
 CREATE SCHEMA IF NOT EXISTS ml;
@@ -55,7 +68,7 @@ positive_samples AS (
     WHERE ce.evento = 'CHURN'
       AND ce.segmento = 'REGULAR'             -- REGULAR only (D13)
       -- Ensure spell_end - 30d still has enough history
-      AND ce.spell_end >= '2025-03-01'::DATE
+      AND ce.spell_end >= '2024-03-01'::DATE  -- V1 (D19): extended to 2024
 
     UNION ALL
 
@@ -75,7 +88,7 @@ positive_samples AS (
     FROM analytics.mv_churn_events ce
     WHERE ce.evento = 'CHURN'
       AND ce.segmento = 'REGULAR'             -- REGULAR only (D13)
-      AND ce.spell_end >= '2025-03-01'::DATE
+      AND ce.spell_end >= '2024-03-01'::DATE  -- V1 (D19): extended to 2024
       -- Ensure reference_date is AFTER spell_start (member was active)
       AND (ce.spell_end - INTERVAL '15 days')::DATE >= ce.spell_start
 
@@ -97,7 +110,7 @@ positive_samples AS (
     FROM analytics.mv_churn_events ce
     WHERE ce.evento = 'CHURN'
       AND ce.segmento = 'REGULAR'             -- REGULAR only (D13)
-      AND ce.spell_end >= '2025-03-01'::DATE
+      AND ce.spell_end >= '2024-03-01'::DATE  -- V1 (D19): extended to 2024
       -- Ensure reference_date is AFTER spell_start (member was active)
       AND (ce.spell_end - INTERVAL '30 days')::DATE >= ce.spell_start
 ),
@@ -110,7 +123,7 @@ positive_samples AS (
 -- -----------------------------------------------------------------------
 active_months AS (
     SELECT generate_series(
-        '2025-03-01'::DATE,
+        '2024-03-01'::DATE,  -- V1 (D19): extended to 2024
         -- Stop 30 days before data cutoff to ensure verifiable labels
         ('2026-02-10'::DATE - INTERVAL '30 days')::DATE,
         '1 month'::INTERVAL

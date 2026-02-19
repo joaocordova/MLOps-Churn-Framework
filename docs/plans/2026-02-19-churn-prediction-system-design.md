@@ -3,7 +3,7 @@
 **Date:** 2026-02-19
 **Version:** 2.0
 **Author:** ML Systems Architecture
-**Status:** Sections 1-4 approved. Sections 5-7 in design.
+**Status:** Sections 1-5 complete. V1 implementation in progress. Sections 6-7 pending.
 **Target:** Senior/Staff ML Engineer technical case (Nubank-level rigor)
 
 ---
@@ -14,7 +14,7 @@
 2. [System Architecture Overview](#2-system-architecture-overview)
 3. [Data Engineering & Feature Store](#3-data-engineering--feature-store)
 4. [Model Architecture](#4-model-architecture)
-5. [Deployment & MLOps](#5-deployment--mlops) — PENDING
+5. [Deployment & MLOps](#5-deployment--mlops)
 6. [Trade-off Analysis](#6-trade-off-analysis) — PENDING
 7. [Frontend & Playbooks](#7-frontend--playbooks) — PENDING
 8. [Decisions Log](#8-decisions-log)
@@ -381,16 +381,102 @@ MONTHLY:  Aggregate outcomes into manager-facing report
 
 ## 5. Deployment & MLOps
 
-> **STATUS: PENDING — Next section to design**
+### 5.1 V1 Release Strategy
 
-Planned topics:
-- Airflow DAG design (daily scoring pipeline)
-- Shadow Mode deployment
-- Feature Drift detection (PSI)
-- Concept Drift detection (actual vs predicted)
-- Circuit Breakers (data quality gates)
-- CI/CD pipeline for automated retraining
-- Upgrade path to event-driven / near-real-time
+V1 is a **baseline release** designed to:
+1. Validate the end-to-end pipeline (data -> features -> model -> scoring -> API)
+2. Establish baseline metrics for comparison with future versions
+3. Build manager trust via retroactive outcome tracking
+
+**V1 Training Configuration:**
+- Training data: 2024-03 to 2025-06 (~16 months)
+- Walk-forward validation: 10 monthly folds (2024-09 through 2025-06)
+- Holdout test: 2025-07 to 2025-12 (6 months out-of-time)
+- This gives broad temporal coverage including New Year resolution cohort
+
+### 5.2 Business Rules Applied in V1
+
+**D17: Monthly Contract Auto-Renewal**
+- Contracts are monthly/recurring, auto-renewing every ~30 days
+- A new contract starts when the previous one expires (if member pays)
+- `contract_expiring_30d` is always True for active monthly members
+- The real financial signal is `days_since_last_payment` and `has_open_receivable`
+
+**D18: Default = Blocked at Turnstile**
+- If a member fails to pay, they are automatically in default
+- Defaulters cannot pass through the turnstile (physically blocked)
+- `is_defaulter = has_open_receivable AND days_since_last_payment > 30`
+- Consequence: `days_since_last_checkin` for defaulters is FORCED absence, not behavioral
+- Churn type classifier distinguishes: DEFAULT (forced) vs BEHAVIORAL (choice)
+
+**D19: 2024-2025 Test Period**
+- Extended training window starts 2024-03-01 (vs previous 2025-03-01)
+- 6-month holdout test provides robust temporal evaluation
+- Captures seasonality effects across a full year cycle
+
+### 5.3 Daily Scoring Pipeline
+
+```
+Daily DAG (4:00 AM, after EVO data refresh):
+
+  Task 1: REFRESH MATERIALIZED VIEW CONCURRENTLY analytics.mv_contract_classified
+  Task 2: REFRESH MATERIALIZED VIEW CONCURRENTLY analytics.mv_spells_v2
+  Task 3: REFRESH MATERIALIZED VIEW CONCURRENTLY analytics.mv_churn_events
+  Task 4: REFRESH MATERIALIZED VIEW CONCURRENTLY analytics.mv_member_kpi_base
+  Task 5: python -m src.scoring.batch_scorer --db-url $DB_URL --model-dir models/v1
+  Task 6: python -m src.monitoring.drift_detector --db-url $DB_URL (weekly)
+  Task 7: Outcome verification query (daily, for predictions 30+ days old)
+```
+
+### 5.4 Circuit Breakers
+
+| Condition | Threshold | Action |
+|-----------|-----------|--------|
+| NULL rate in any feature | > 5% (40% for check-in features) | Halt scoring |
+| PSI feature drift | > 0.20 | Alert + recommend retrain |
+| Hit rate (HIGH tier) | < 50% | Alert + mandatory retrain |
+| Scoring latency | > 30 min | Alert ops team |
+
+### 5.5 Shadow Mode Deployment
+
+New model versions are deployed in **shadow mode** first:
+1. V2 scores alongside V1 (production) for 2 weeks
+2. Both sets of predictions stored in `ml.churn_predictions_history`
+3. After 30 days, compare outcome metrics
+4. Promote to production only if V2 outperforms V1
+
+### 5.6 Model Artifacts
+
+```
+models/
+  v20260219_120000/
+    xgb_freq.joblib         # L0 specialist: frequency
+    xgb_fin.joblib          # L0 specialist: financial
+    xgb_tenure.joblib       # L0 specialist: tenure
+    xgb_context.joblib      # L0 specialist: context
+    meta_learner.joblib     # L1 LogReg
+    calibrator.joblib       # Platt scaling
+    config_snapshot.joblib  # Feature config + scale_pos_weight
+    metrics.json            # Evaluation results + metadata
+```
+
+### 5.7 Implementation Files (V1)
+
+| File | Purpose |
+|------|---------|
+| `config/features.py` | 28 features across 8 groups (added `is_defaulter` D18) |
+| `config/model.py` | Hyperparameters, thresholds, date ranges (D17-D19) |
+| `src/training/data_loader.py` | Load from ml.training_samples, derive `is_defaulter` |
+| `src/training/stacking_ensemble.py` | 4 L0 XGBoost + L1 LogReg + Platt calibration |
+| `src/training/walk_forward.py` | Temporal CV (2024-2025 coverage) |
+| `src/training/train.py` | CLI entrypoint for V1 training |
+| `src/scoring/batch_scorer.py` | Daily scoring with MV refresh + quality gates |
+| `src/scoring/shap_explainer.py` | SHAP TreeExplainer + Portuguese templates |
+| `src/scoring/churn_type.py` | Rule-based: BEHAVIORAL/DEFAULT/FINANCIAL/FULL/NONE |
+| `src/monitoring/drift_detector.py` | PSI, concept drift, hit rate tracking |
+| `sql/gold/ml_training_samples.sql` | Point-in-time feature store (2024+) |
+| `sql/gold/ml_churn_predictions.sql` | Output tables + playbook definitions |
+| `sql/gold/ml_outcome_tracking.sql` | Retroactive outcome verification |
 
 ---
 
@@ -438,6 +524,9 @@ Planned topics:
 | D14 | 2026-02-19 | Retroactive outcome tracking with outcome categories | Manager trust, model drift detection, playbook ROI measurement |
 | D15 | 2026-02-19 | Manager sees outcomes by tier (churned/recovered/improved/worsened) | Plain-language feedback, no ML metrics shown to managers |
 | D16 | 2026-02-19 | Walk-forward validation auto-adapts window size | Ensures >= 200 churn events per fold regardless of data volume |
+| D17 | 2026-02-19 | **Monthly contracts auto-renew every 30 days** | contract_expiring_30d always True for monthly; days_since_last_payment is the real signal |
+| D18 | 2026-02-19 | **Non-payment = default = blocked turnstile** | Added `is_defaulter` feature. Forced absence != behavioral absence. DEFAULT churn type added. |
+| D19 | 2026-02-19 | **V1 uses 2024-2025 as training/test period** | Broader temporal coverage, captures seasonality. Train 2024-03..2025-06, Test 2025-07..2025-12 |
 
 ---
 
@@ -446,10 +535,11 @@ Planned topics:
 | # | Question | Status | Impact |
 |---|----------|--------|--------|
 | Q1 | Peak hour definition: is 17:00-20:00 correct? | **OPEN** | Affects `peak_hour_ratio` feature |
-| Q2 | How many active REGULAR members per branch? | **OPEN** | Scoring pipeline sizing |
-| Q3 | Validation query results from existing MVs | **BLOCKING** | Must verify data layer before ML |
+| Q2 | How many active REGULAR members per branch? | **RESOLVED** (ML_VAL_02: 8,098 total) | Scoring pipeline sizing |
+| Q3 | Validation query results from existing MVs | **RESOLVED** (ML_VAL_01,02,05,14 received) | Data layer verified |
 | Q4 | Azure Function endpoints — parameterized SQL done? | **OPEN** | API layer design |
-| Q5 | What is the actual monthly churn count for REGULAR? | **BLOCKING** | Walk-forward window sizing |
+| Q5 | What is the actual monthly churn count for REGULAR? | **RESOLVED** (ML_VAL_01: 500-1200/month) | 1-month walk-forward windows |
+| Q6 | Does 2024 data exist in sufficient quality? | **OPEN** | V1 training starts at 2024-03 (D19) — need to validate |
 
 ---
 
@@ -469,8 +559,12 @@ Planned topics:
 
 If context window is exhausted:
 
-> "I'm continuing the SkyFit Churn Prediction System design.
+> "I'm continuing the SkyFit Churn Prediction System.
 > Read `docs/plans/2026-02-19-churn-prediction-system-design.md` for full context.
-> Sections 1-4 are approved. Continue with Section 5: Deployment & MLOps.
-> Key constraint: REGULAR members only. No aggregators in the model.
-> Data validation results pending — check sql/validation/ for queries to run."
+> Sections 1-5 complete. V1 Python implementation committed. Sections 6-7 pending.
+> Key constraints:
+>   - REGULAR members only (D13). No aggregators.
+>   - Monthly contracts auto-renew (D17). Non-payment = turnstile blocked (D18).
+>   - V1 trains on 2024-2025, test on 2025-H2 (D19).
+>   - `is_defaulter` feature distinguishes forced absence from behavioral absence.
+> Next steps: Run training pipeline, evaluate V1 results, then Sections 6-7."

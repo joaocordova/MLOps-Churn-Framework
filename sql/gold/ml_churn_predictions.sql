@@ -31,9 +31,11 @@ CREATE TABLE ml.churn_predictions (
     risk_tier           TEXT NOT NULL CHECK (risk_tier IN ('HIGH', 'MEDIUM', 'LOW')),
 
     -- Churn type classification
-    churn_type          TEXT NOT NULL CHECK (churn_type IN ('BEHAVIORAL', 'FINANCIAL', 'FULL', 'NONE')),
-    -- BEHAVIORAL: paying but not attending (10+ days absent, active contract)
-    -- FINANCIAL:  contract expiring/expired, attendance already dropped
+    churn_type          TEXT NOT NULL CHECK (churn_type IN ('BEHAVIORAL', 'FINANCIAL', 'DEFAULT', 'FULL', 'NONE')),
+    -- BEHAVIORAL: paying but not attending (10+ days absent, active contract) (D9)
+    -- FINANCIAL:  has open receivable but not yet in default
+    -- DEFAULT:    non-payment -> blocked at turnstile (D18). Absence is FORCED.
+    --             Monthly contract failed to renew due to non-payment (D17).
     -- FULL:       both behavioral and financial signals present
     -- NONE:       low risk, no immediate signals
 

@@ -1,0 +1,1 @@
+"""SkyFit training module."""

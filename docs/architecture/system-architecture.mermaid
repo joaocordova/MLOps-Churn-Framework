@@ -1,0 +1,116 @@
+---
+title: "SkyFit Churn Prediction System — End-to-End Architecture v1.0"
+---
+
+graph TB
+    subgraph BRONZE["BRONZE LAYER (core.*)"]
+        direction LR
+        EVO_M["evo_members\ncadastro + gympass_id"]
+        EVO_MM["evo_member_memberships\ncontratos"]
+        EVO_E["evo_entries\ncheck-ins + block_reason"]
+        EVO_S["evo_sales + sale_items\nvendas"]
+        LTV_R["mv_receivables_normalized\nrecebiveis (receita real)"]
+    end
+
+    subgraph SILVER["SILVER LAYER (analytics.*)"]
+        MV1["stg_contract_classified\nSegmento REGULAR/AGREGADOR\ndata_efetiva_fim"]
+        MV2["stg_spells\nPeriodos continuos por segmento\nGap > 30d = novo spell"]
+        MV3["stg_churn_events\nCHURN / MIGRACAO / ATIVO\nchurn_confirmed_date"]
+    end
+
+    subgraph GOLD["GOLD LAYER (ml.*)"]
+        FS["mart_training_samples\nPoint-in-Time Features\n28 features + target\n3 horizons per churn"]
+        KPI["mart_member_kpi\n1 row per member\nDashboard source"]
+        PRED["mart_churn_predictions\nDaily scores + SHAP\nPlaybook assignment"]
+    end
+
+    subgraph ML_PIPELINE["ML PIPELINE"]
+        TRAIN["Training Pipeline\nMonthly retrain\nWalk-forward validation"]
+        MODEL["XGBoost Stacking\nL0: 4 specialist models\nL1: LogReg meta-learner"]
+        CALIB["Calibration\nPlatt scaling\n+ SHAP explainer"]
+    end
+
+    subgraph SCORING["DAILY SCORING"]
+        AIRFLOW["Airflow DAG\nDaily 4AM\n1.Refresh MVs\n2.Score all members\n3.Write predictions\n4.Quality gates"]
+    end
+
+    subgraph API["API LAYER (Azure Functions)"]
+        EP1["GET /api/churn/branch/{id}\nRisk overview"]
+        EP2["GET /api/churn/member/{id}\nMember detail + SHAP"]
+        EP3["GET /api/churn/playbook/{tier}\nIntervention recipes"]
+        EP4["GET /api/monitoring/drift\nModel health"]
+    end
+
+    subgraph FRONTEND["LOVABLE DASHBOARD"]
+        D1["Risk Overview\nBy tier: HIGH/MEDIUM/LOW"]
+        D2["Member Detail\nTimeline + contract history"]
+        D3["Why Panel\nSHAP in plain language"]
+        D4["Playbook Actions\nRecovery campaigns"]
+    end
+
+    subgraph MONITORING["MLOPS MONITORING"]
+        MON1["Feature Drift\nPSI weekly"]
+        MON2["Concept Drift\nActual vs predicted monthly"]
+        MON3["Circuit Breaker\nHalt if NULL > 5%"]
+        MON4["Shadow Mode\nNew vs prod comparison"]
+    end
+
+    %% Data flow
+    EVO_M --> MV1
+    EVO_MM --> MV1
+    EVO_E --> MV1
+
+    MV1 --> MV2
+    MV2 --> MV3
+
+    MV2 --> KPI
+    MV3 --> KPI
+    EVO_E --> KPI
+    LTV_R --> KPI
+
+    MV2 --> FS
+    MV3 --> FS
+    EVO_E --> FS
+    LTV_R --> FS
+
+    FS --> TRAIN
+    TRAIN --> MODEL
+    MODEL --> CALIB
+
+    AIRFLOW --> PRED
+    CALIB --> AIRFLOW
+    KPI --> AIRFLOW
+
+    PRED --> EP1
+    PRED --> EP2
+    PRED --> EP3
+    MONITORING --> EP4
+
+    EP1 --> D1
+    EP2 --> D2
+    EP2 --> D3
+    EP3 --> D4
+
+    PRED --> MON1
+    PRED --> MON2
+    PRED --> MON3
+    PRED --> MON4
+
+    %% Styling
+    classDef bronze fill:#2d3748,stroke:#4a5568,color:#e2e8f0
+    classDef silver fill:#2c5282,stroke:#3182ce,color:#e2e8f0
+    classDef gold fill:#975a16,stroke:#d69e2e,color:#e2e8f0
+    classDef ml fill:#553c9a,stroke:#805ad5,color:#e2e8f0
+    classDef scoring fill:#285e61,stroke:#38b2ac,color:#e2e8f0
+    classDef api fill:#276749,stroke:#38a169,color:#e2e8f0
+    classDef frontend fill:#9b2c2c,stroke:#fc8181,color:#e2e8f0
+    classDef monitoring fill:#744210,stroke:#ed8936,color:#e2e8f0
+
+    class EVO_M,EVO_MM,EVO_E,EVO_S,LTV_R bronze
+    class MV1,MV2,MV3 silver
+    class FS,KPI,PRED gold
+    class TRAIN,MODEL,CALIB ml
+    class AIRFLOW scoring
+    class EP1,EP2,EP3,EP4 api
+    class D1,D2,D3,D4 frontend
+    class MON1,MON2,MON3,MON4 monitoring

@@ -1,0 +1,59 @@
+---
+title: "SkyFit Analytics — Arquitetura de Dados v2.0"
+---
+
+graph TB
+    subgraph FONTE["🗄️ CAMADA RAW (core.*)"]
+        EVO_M["evo_members<br/>cadastro + gympass_id"]
+        EVO_MM["evo_member_memberships<br/>contratos (cada renovação = linha)"]
+        EVO_E["evo_entries<br/>check-ins + block_reason"]
+        EVO_S["evo_sales + sale_items<br/>vendas"]
+        LTV_R["mv_receivables_normalized<br/>recebíveis (receita real)"]
+    end
+
+    subgraph SILVER["⚙️ CAMADA SILVER (analytics.*)"]
+        MV1["mv_contract_classified<br/>─────────────────<br/>• Cada contrato com SEGMENTO<br/>• Nível 1: nome do plano<br/>• Nível 2: entries no período<br/>• data_efetiva_fim calculada"]
+
+        MV2["mv_spells_v2<br/>─────────────────<br/>• Spell = período contínuo<br/>• Segregado por segmento<br/>• Gap > 30d = novo spell<br/>• Troca segmento = novo spell"]
+
+        MV3["mv_churn_events<br/>─────────────────<br/>• CHURN: 30d sem contrato<br/>• MIGRAÇÃO: troca segmento ≤30d<br/>• ATIVO / INDETERMINADO<br/>• churn_confirmed_date"]
+    end
+
+    subgraph GOLD["🏆 CAMADA GOLD (analytics.*)"]
+        MV4["mv_member_kpi_base<br/>─────────────────<br/>• 1 linha por membro<br/>• Spells + Churn + Freq + Receita<br/>• Feature Store para ML<br/>• Insumo para dashboard"]
+    end
+
+    subgraph CONSUMO["📊 CONSUMO"]
+        AF["Azure Functions<br/>(endpoints REST)"]
+        DASH["Dashboard Lovable<br/>(KPI cards, heatmap)"]
+        ML["Modelo de Churn<br/>(Python/scikit-learn)"]
+        EMAIL["Régua de E-mail<br/>(alertas automáticos)"]
+    end
+
+    EVO_M --> MV1
+    EVO_MM --> MV1
+    EVO_E --> MV1
+
+    MV1 --> MV2
+    MV2 --> MV3
+
+    MV2 --> MV4
+    MV3 --> MV4
+    EVO_E --> MV4
+    LTV_R --> MV4
+
+    MV4 --> AF
+    MV3 --> AF
+    AF --> DASH
+    MV4 --> ML
+    MV4 --> EMAIL
+
+    classDef fonte fill:#2d3748,stroke:#4a5568,color:#e2e8f0
+    classDef silver fill:#2c5282,stroke:#3182ce,color:#e2e8f0
+    classDef gold fill:#975a16,stroke:#d69e2e,color:#e2e8f0
+    classDef consumo fill:#276749,stroke:#38a169,color:#e2e8f0
+
+    class EVO_M,EVO_MM,EVO_E,EVO_S,LTV_R fonte
+    class MV1,MV2,MV3 silver
+    class MV4 gold
+    class AF,DASH,ML,EMAIL consumo

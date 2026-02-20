@@ -198,8 +198,14 @@ def main() -> None:
     )
     parser.add_argument(
         "--db-url",
-        required=True,
-        help="PostgreSQL connection string",
+        default=None,
+        help="PostgreSQL connection string. If not provided, loads from "
+             "C:\\skyfit-datalake\\config\\.env automatically.",
+    )
+    parser.add_argument(
+        "--env-file",
+        default=None,
+        help="Path to .env file with database credentials.",
     )
     parser.add_argument(
         "--output-dir",
@@ -213,6 +219,14 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    # Resolve database connection
+    if args.db_url:
+        db_url = args.db_url
+    else:
+        from config.database import get_connection_string
+        env_path = Path(args.env_file) if args.env_file else None
+        db_url = get_connection_string(env_path)
+
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -222,7 +236,7 @@ def main() -> None:
     logger.info("=" * 70)
     logger.info("Step 1: Loading training data [%s, %s)...",
                 MODEL_CONFIG.TRAIN_START_DATE, MODEL_CONFIG.DATA_CUTOFF_DATE)
-    df = load_training_data(args.db_url)
+    df = load_training_data(db_url)
 
     # 2. Walk-forward validation
     if not args.skip_cv:
